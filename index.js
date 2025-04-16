@@ -17,7 +17,6 @@ const client = new Client({
 
 client.once('ready', () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
-
   client.user.setActivity('shredsauce servers', { type: 3 });
 
   client.on('interactionCreate', async interaction => {
@@ -37,15 +36,17 @@ client.once('ready', () => {
 
     if (interaction.commandName === 'status') {
       try {
+        await interaction.deferReply(); // prevent timeout crash
+
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 8000);
         const res = await fetch(CHECK_URL, { signal: controller.signal });
         clearTimeout(timeout);
 
         const msg = res.ok ? '✅ Sauce server is **up**.' : '❌ Sauce server is **down**.';
-        await interaction.reply(msg);
+        await interaction.editReply(msg);
       } catch {
-        await interaction.reply('❌ Sauce server is **down**.');
+        await interaction.editReply('❌ Sauce server is **down**.');
       }
     }
   });
