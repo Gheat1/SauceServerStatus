@@ -1,79 +1,89 @@
-const { Client, GatewayIntentBits, ChannelType } = require('discord.js');
+const { Client, GatewayIntentBits, Partials, ActivityType, ChannelType, InteractionType, ActionRowBuilder, StringSelectMenuBuilder, SlashCommandBuilder } = require('discord.js');
 const fetch = require('node-fetch');
+require('dotenv').config();
 
 const TOKEN = process.env.TOKEN;
 const CHECK_URL = 'https://shredsauce.com/test.php';
-const CHECK_INTERVAL = 10 * 60 * 1000; // 10 mins
-let broadcastChannel = null;
+const CHECK_INTERVAL = 10 * 60 * 1000;
+
 let wasDown = false;
+let selectedChannelId = null;
 
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-  ]
+    GatewayIntentBits.MessageContent
+  ],
+  partials: [Partials.Channel]
 });
 
 client.once('ready', () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
-  client.user.setActivity('shredsauce servers', { type: 3 });
+  client.user.setActivity('shredsauce servers', { type: ActivityType.Watching });
+});
 
-  client.on('interactionCreate', async interaction => {
-    if (!interaction.isChatInputCommand()) return;
+client.on('interactionCreate', async interaction => {
+  if (interaction.type === InteractionType.ApplicationCommand) {
+    if (interaction.commandName === 'setchannel') {
+      const channels = interaction.guild.channels.cache
+        .filter(ch => ch.type === ChannelType.GuildText)
+        .map(ch => ({ label: ch.name, value: ch.id }))
+        .slice(0, 25); // max Discord dropdown limit
 
-    if (interaction.commandName === 'setup') {
-      const channel = interaction.channel;
+      const menu = new StringSelectMenuBuilder()
+        .setCustomId('channel_select')
+        .setPlaceholder('Choose a channel to send updates')
+        .addOptions(channels);
 
-      if (channel.type !== ChannelType.GuildText) {
-        await interaction.reply({ content: '❌ You must run this in a text channel.', ephemeral: true });
-        return;
-      }
+      const row = new ActionRowBuilder().addComponents(menu);
 
-      broadcastChannel = channel;
-      await interaction.reply(`✅ Setup complete. This channel (${channel}) will now receive alerts.`);
+      await interaction.reply({ content: 'Pick a channel:', components: [row], ephemeral: true });
     }
 
     if (interaction.commandName === 'status') {
-      try {
-        await interaction.deferReply(); // prevent timeout crash
-
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 8000);
-        const res = await fetch(CHECK_URL, { signal: controller.signal });
-        clearTimeout(timeout);
-
-        const msg = res.ok ? '✅ Sauce server is **up**.' : '❌ Sauce server is **down**.';
-        await interaction.editReply(msg);
-      } catch {
-        await interaction.editReply('❌ Sauce server is **down**.');
-      }
+      const up = await checkServer();
+      const msg = up ? '✅ Sauce server is **up**.' : '❌ Sauce server is **down**.';
+      await interaction.reply(msg);
     }
-  });
+  }
+
+  if (interaction.isStringSelectMenu() && interaction.customId === 'channel_select') {
+    selectedChannelId = interaction.values[0];
+    await interaction.update({ content: `📡 Updates will be sent to <#${selectedChannelId}>`, components: [] });
+    runCheck(); // run once after setup
+  }
 });
 
-setInterval(async () => {
-  if (!broadcastChannel) return;
-
+async function checkServer() {
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 8000);
-    const res = await fetch(CHECK_URL, { signal: controller.signal });
-    clearTimeout(timeout);
 
-    if (res.ok && wasDown) {
-      broadcastChannel.send('✅ **Shredsauce is back up.**');
-      wasDown = false;
-    } else if (!res.ok && !wasDown) {
-      broadcastChannel.send('❌ **Shredsauce might be down.**');
-      wasDown = true;
-    }
+    await fetch(CHECK_URL, { signal: controller.signal });
+    clearTimeout(timeout);
+    return true; // got any response = up
   } catch {
-    if (!wasDown) {
-      broadcastChannel.send('⚠️ **Could not reach Shredsauce.**');
-      wasDown = true;
-    }
+    return false; // timeout or fetch failed = down
   }
-}, CHECK_INTERVAL);
+}
+
+async function runCheck() {
+  const isUp = await checkServer();
+  if (!selectedChannelId) return;
+
+  const channel = await client.channels.fetch(selectedChannelId);
+  if (!channel) return;
+
+  if (isUp && wasDown) {
+    channel.send('✅ **Shredsauce is back up.**');
+  } else if (!isUp && !wasDown) {
+    channel.send('❌ **Shredsauce might be down.**');
+  }
+
+  wasDown = isUp;
+}
+
+setInterval(runCheck, CHECK_INTERVAL);
 
 client.login(TOKEN);
