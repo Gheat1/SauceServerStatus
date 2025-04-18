@@ -4,81 +4,68 @@ const {
   GatewayIntentBits,
   Partials,
   ActivityType,
-  ChannelType,
-  InteractionType,
-  ActionRowBuilder,
-  StringSelectMenuBuilder
+  InteractionType
 } = require('discord.js');
 const fetch = require('node-fetch');
 require('dotenv').config();
 
-const TOKEN = process.env.TOKEN;
-const CHECK_URL = 'https://shredsauce.com/test.php';
-const CHECK_INTERVAL = 10 * 60 * 1000; // 10 minutes
-let wasDown = false;
-let selectedChannelId = null;
+const TOKEN            = process.env.TOKEN;
+const CHECK_URL        = 'https://shredsauce.com/test.php';
+const CHECK_INTERVAL   = 10 * 60 * 1000; // 10 minutes
 
+// Your two fixed alert channels:
+const ALERT_CHANNEL_IDS = [
+  '1362505260945379398',
+  '1360242307185774802'
+];
+
+let wasDown = false;
 const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent
-  ],
-  partials: [Partials.Channel]
+  intents: [ GatewayIntentBits.Guilds ],
+  partials: [ Partials.Channel ]
 });
 
-client.once('ready', () => {
+client.once('ready', async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
   client.user.setActivity('shredsauce servers', { type: ActivityType.Watching });
+
+  // Determine current state
+  const up = await checkServer();
+  wasDown = !up;
+
+  // Send initial status into each channel
+  const initMsg = up
+    ? '✅ **Shredsauce is currently up.**'
+    : '❌ **Shredsauce is currently down.**';
+
+  for (const id of ALERT_CHANNEL_IDS) {
+    try {
+      const ch = await client.channels.fetch(id);
+      if (ch?.isText()) await ch.send(initMsg);
+    } catch (err) {
+      console.error(`❌ Could not send initial status to ${id}:`, err);
+    }
+  }
+
+  // Schedule future checks
+  setInterval(runCheck, CHECK_INTERVAL);
 });
 
+// Slash /status
 client.on('interactionCreate', async interaction => {
-  // Slash commands
-  if (interaction.type === InteractionType.ApplicationCommand) {
-    // /setchannel handler
-    if (interaction.commandName === 'setchannel') {
-      const channels = interaction.guild.channels.cache
-        .filter(ch => ch.type === ChannelType.GuildText)
-        .map(ch => ({ label: ch.name, value: ch.id }))
-        .slice(0, 25);
+  if (interaction.type !== InteractionType.ApplicationCommand) return;
+  if (interaction.commandName !== 'status') return;
 
-      const menu = new StringSelectMenuBuilder()
-        .setCustomId('channel_select')
-        .setPlaceholder('Choose a channel to send updates')
-        .addOptions(channels);
-
-      const row = new ActionRowBuilder().addComponents(menu);
-      await interaction.reply({ content: '📡 Pick a channel:', components: [row], ephemeral: true });
-    }
-
-    // /status handler (fixed to defer & editReply)
-    if (interaction.commandName === 'status') {
-      try {
-        await interaction.deferReply();                               // 👈 defer first
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 8000);
-        const res = await fetch(CHECK_URL, { signal: controller.signal });
-        clearTimeout(timeout);
-
-        const msg = res.ok
-          ? '✅ Sauce server is **up**.'
-          : '❌ Sauce server is **down**.';
-        await interaction.editReply(msg);                              // 👈 then editReply
-      } catch {
-        await interaction.editReply('❌ Sauce server is **down**.');
-      }
-    }
-  }
-
-  // Channel‑select menu callback
-  if (interaction.isStringSelectMenu() && interaction.customId === 'channel_select') {
-    selectedChannelId = interaction.values[0];
-    await interaction.update({ content: `✅ Updates will be sent to <#${selectedChannelId}>`, components: [] });
-    runCheck();   // send one immediate check
-  }
+  await interaction.deferReply({ ephemeral: true });
+  const up = await checkServer();
+  await interaction.editReply(
+    up
+      ? '✅ Sauce server is **up**.'
+      : '❌ Sauce server is **down**.'
+  );
 });
 
-// Returns true if any response within 8s
+// Helper to check server (any response within 8s = up)
 async function checkServer() {
   try {
     const controller = new AbortController();
@@ -91,22 +78,27 @@ async function checkServer() {
   }
 }
 
-// Periodic up/down alerts
+// Run every interval, send message only on flip
 async function runCheck() {
-  if (!selectedChannelId) return;
-  const channel = await client.channels.fetch(selectedChannelId);
-  if (!channel) return;
-
-  const isUp = await checkServer();
-  if (isUp && wasDown) {
-    channel.send('✅ **Shredsauce is back up.**');
-  } else if (!isUp && !wasDown) {
-    channel.send('❌ **Shredsauce might be down.**');
+  const up = await checkServer();
+  if (up === !wasDown) {
+    // no change
+    return;
   }
-  wasDown = isUp;
-}
+  wasDown = !up;
 
-// Schedule periodic checks
-setInterval(runCheck, CHECK_INTERVAL);
+  const flipMsg = up
+    ? '✅ **Shredsauce is back up.**'
+    : '❌ **Shredsauce might be down.**';
+
+  for (const id of ALERT_CHANNEL_IDS) {
+    try {
+      const ch = await client.channels.fetch(id);
+      if (ch?.isText()) await ch.send(flipMsg);
+    } catch (err) {
+      console.error(`❌ Could not send alert to ${id}:`, err);
+    }
+  }
+}
 
 client.login(TOKEN);
