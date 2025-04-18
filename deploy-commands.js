@@ -1,3 +1,4 @@
+// deploy-commands.js
 const { SlashCommandBuilder, REST, Routes } = require('discord.js');
 require('dotenv').config();
 
@@ -17,6 +18,6 @@ const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
     );
     console.log('✅ Slash commands deployed.');
   } catch (err) {
-    console.error(err);
+    console.error('❌ Failed to deploy commands:', err);
   }
 })();
