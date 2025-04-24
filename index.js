@@ -40,7 +40,7 @@ async function runCheck() {
   wasDown = !up;
 
   const flipMsg = up
-    ? '✅ **Shredsauce is back up.**'
+    ? '✅ **Shredsauce Website is back up.**'
     : '❌ **Shredsauce might be down.**';
 
   for (const id of ALERT_CHANNEL_IDS) {
@@ -61,7 +61,7 @@ client.once('ready', async () => {
   const up = await checkServer();
   wasDown = !up;
   const initMsg = up
-    ? '✅ **Shredsauce is currently up.**'
+    ? '✅ **Shredsauce Website is up.**'
     : '❌ **Shredsauce is currently down.**';
 
   for (const id of ALERT_CHANNEL_IDS) {
@@ -85,8 +85,8 @@ client.on('interactionCreate', async interaction => {
   const up = await checkServer();
   await interaction.editReply(
     up
-      ? '✅ Sauce server is **up**.'
-      : '❌ Sauce server is **down**.'
+      ? '✅ Sauce website is **up**.'
+      : '❌ Sauce is **down**.'
   );
 });
 
