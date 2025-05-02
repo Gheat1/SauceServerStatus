@@ -10,7 +10,8 @@ const CHECK_INTERVAL = 10 * 60 * 1000;  // 10 minutes
 // your two alert channels
 const ALERT_CHANNEL_IDS = [
   '1362505260945379398',
-  '1360242307185774802'
+  '1360242307185774802',
+  '1367713718267285515'
 ];
 
 let wasDown = false;
