@@ -14,6 +14,7 @@
     "@types/node": "^22.13.11",
     "discord.js": "^14.18.0",
     "dotenv": "^16.5.0",
-    "node-fetch": "^2.6.7"
+    "node-fetch": "^2.6.7",
+    "express": "^4.18.2" <--- ADD THIS LINE
   }
 }
