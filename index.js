@@ -2,9 +2,13 @@
 const { Client, GatewayIntentBits, ActivityType, InteractionType, Partials } = require('discord.js');
 const fetch = require('node-fetch');
 require('dotenv').config();
+const express = require('express'); // Import express
 
-const TOKEN          = process.env.TOKEN;
-const CHECK_URL      = 'https://shredsauce.com/test.php';
+const app = express(); // Create an express application
+const port = process.env.PORT || 3000; // Use the PORT environment variable or default to 3000
+
+const TOKEN             = process.env.TOKEN;
+const CHECK_URL         = 'https://shredsauce.com/test.php';
 const CHECK_INTERVAL = 10 * 60 * 1000;  // 10 minutes
 
 // your two alert channels
@@ -20,11 +24,21 @@ const client = new Client({
   partials: [ Partials.Channel ]
 });
 
+// --- Health Check Endpoint ---
+app.get('/healthz', (req, res) => {
+  res.status(200).send('OK'); // Respond with a 200 OK status
+});
+
+app.listen(port, () => {
+  console.log(`Health check server listening on port ${port}`);
+});
+// --- End Health Check Endpoint ---
+
 // checkServer: any HTTP response within 8s = UP
 async function checkServer() {
   try {
     const controller = new AbortController();
-    const timeout    = setTimeout(() => controller.abort(), 8000);
+    const timeout     = setTimeout(() => controller.abort(), 8000);
     await fetch(CHECK_URL, { signal: controller.signal });
     clearTimeout(timeout);
     return true;
